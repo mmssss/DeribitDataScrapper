@@ -573,7 +573,8 @@ class DeribitClient(Thread, WebSocketApp):
         """
         self.websocket.send(json.dumps(request), ABNF.OPCODE_TEXT)
         # TODO: do it better. Unsync.
-        time.sleep(0.05)
+        # See Deribit rate limits: https://www.deribit.com/kb/deribit-rate-limits
+        time.sleep(0.08)
 
     def send_block_sync_request(
         self, params: dict, method="get_position", _private="private"
