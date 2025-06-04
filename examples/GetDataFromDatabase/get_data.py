@@ -86,26 +86,6 @@ def process_books(books: pd.DataFrame):
     return books
 
 
-def initialize_data_dir(data_dir, glob_str):
-    last_idx = None
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-    else:
-        files = [f for f in glob.glob(data_dir + '/' + glob_str) if os.path.isfile(f)]
-
-        idxs = []
-        for file in files:
-            # find first digit in file name
-            s = os.path.basename(file).split('.')[0]
-            if (match := re.search(r"\d", s)):
-                idxs.append(int(s[match.start():]))
-
-        if len(idxs) != 0:
-            idxs.sort()
-            last_idx = idxs[-1]
-    return last_idx
-
-
 def get_change_id_range(table_name) -> Tuple[int, int]:
     query = f"""
     SELECT MIN(CHANGE_ID) AS min_change_id,
@@ -137,7 +117,7 @@ def get_timestamp_range(table_name) -> Tuple[pd.Timestamp, pd.Timestamp]:
               help='Start index of the data to download')
 @click.option('--end-idx', type=int, default=2_148_000_000, show_default=True,
               help='End index of the data to download')
-@click.option('--batch-size', type=int, default=4_000_000, show_default=True,
+@click.option('--batch-size', type=int, default=2_000_000, show_default=True,
               help='Batch size')
 @click.option('--fetch-table-info', is_flag=True, help='Fetch database table info. May be time-consuming.')
 @click.argument('data-type', type=click.Choice(['books_raw', 'books_processed', 'trades']))
@@ -154,19 +134,12 @@ def main(start_idx, end_idx, batch_size, fetch_table_info, data_type, save_dir):
 
     if data_type in ('books_raw', 'books_processed'):
         table_name = 'TABLE_DEPTH_10'
-        glob_str = 'books[0-9]*.hdf'
-        data_file_fmt = save_dir + '/books{:0004d}.hdf'
     elif data_type == 'trades':
         table_name = 'Trades_table_test'
-        glob_str = 'trades[0-9]*.hdf'
-        data_file_fmt = save_dir + '/trades{:0004d}.hdf'
+    date_format = "%Y-%m-%dT%H%M%S.%f"
 
-    if (batch_num := initialize_data_dir(save_dir, glob_str)) is not None:
-        start_idx = start_idx + (batch_num - 1) * batch_size
-        log.info(f'Existing data directory found, continuing from batch {batch_num} (index={start_idx})')
-    else:
-        batch_num = 1
-        start_idx = start_idx
+    batch_num = 1
+    start_idx = start_idx
 
     log.info(f'Database table: `{table_name}`')
     if fetch_table_info:
@@ -199,8 +172,9 @@ def main(start_idx, end_idx, batch_size, fetch_table_info, data_type, save_dir):
             log.info(f'Processing books...')
             df = process_books(df)
         
-        file_name = data_file_fmt.format(batch_num)
-        df.to_hdf(file_name, key=data_type, complevel=3)
+        file_name = f"{min_ts_obtained.strftime(date_format)[:-3]}--{max_ts_obtained.strftime(date_format)[:-3]}.hdf"
+        file_path = os.path.join(save_dir, file_name)
+        df.to_hdf(file_path, key=data_type, complevel=3)
         log.info(f'Saved to file `{os.path.basename(file_name)}`')
         batch_num += 1
 
